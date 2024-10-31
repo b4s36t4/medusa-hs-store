@@ -1,110 +1,121 @@
 import { Cart } from "@medusajs/medusa"
-import React, { useState, useEffect, useMemo, useCallback } from "react"
-// @ts-ignore
-import { loadHyper } from "@juspay-tech/hyper-js"
-// @ts-ignore
-import { useHyper, useWidgets } from "@juspay-tech/react-hyper-js"
-import { Button } from "@medusajs/ui"
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react"
+import { Button, useToast } from "@medusajs/ui"
+import {
+  deletePaymentSessionForCart,
+  placeOrder,
+} from "@modules/checkout/actions"
+import { usePathname, useRouter } from "next/navigation"
 
-interface Props {
+interface ButtonProps {
   cart: Omit<Cart, "refundable_amount" | "refunded_total">
   notReady: boolean
   "data-testid"?: string
 }
 
-export const HyperswitchPaymentButton = ({ cart, notReady }: Props) => {
-  const [loading, setIsLoading] = useState(false)
+export const HyperswitchPaymentButton = ({
+  cart,
+  notReady,
+  "data-testid": dataTestId,
+}: ButtonProps) => {
+  const [hyper, setHyper] = useState<any>()
+  const [widgets, setWidgets] = useState<any>()
+  const checkoutComponent = useRef<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const toast = useToast()
 
-  const hyper = useHyper()
-  const elements = useWidgets()
+  const router = useRouter()
+  const pathname = usePathname()
 
   const clientSecret = useMemo(() => {
-    return cart.payment_session?.data?.client_secret
+    return cart.payment_session?.data.client_secret as string
   }, [cart])
 
-  const onSubmit = useCallback(async () => {
-    if (!elements || !hyper || !clientSecret) {
+  useEffect(() => {
+    if (!clientSecret) {
       return
     }
-    const card = elements.getElement?.("card")
-    setIsLoading(true)
-    console.log(hyper)
-    await hyper
-      .confirmCardPayment(clientSecret as string, {
-        payment_method: {
-          card: card,
-          billing_details: {
-            name:
-              cart.billing_address.first_name +
-              " " +
-              cart.billing_address.last_name,
-            address: {
-              city: cart.billing_address.city ?? undefined,
-              country: cart.billing_address.country_code ?? undefined,
-              line1: cart.billing_address.address_1 ?? undefined,
-              line2: cart.billing_address.address_2 ?? undefined,
-              postal_code: cart.billing_address.postal_code ?? undefined,
-              state: cart.billing_address.province ?? undefined,
-            },
-            email: cart.email,
-            phone: cart.billing_address.phone ?? undefined,
-          },
+    const scriptTag = document.createElement("script")
+    scriptTag.setAttribute(
+      "src",
+      "https://beta.hyperswitch.io/v1/HyperLoader.js"
+    )
+
+    const load = async () => {
+      // @ts-ignore
+      const hyper = Hyper(process.env.NEXT_PUBLIC_HYPERSWITCH_KEY, {
+        //You can configure this as an endpoint for all the api calls such as session, payments, confirm call.
+      })
+      setHyper(hyper)
+
+      // const appearance = {
+      //   theme: "midnight",
+      // }
+      const widgets = hyper.widgets({ clientSecret })
+      setWidgets(widgets)
+      const unifiedCheckoutOptions = {
+        layout: "tabs",
+        wallets: {
+          walletReturnUrl: "https://example.com/complete",
+          //Mandatory parameter for Wallet Flows such as Googlepay, Paypal and Applepay
         },
-      })
-      .then(({ error, paymentIntent }: { error: any; paymentIntent: any }) => {
-        console.log(error, paymentIntent, "det")
-        if (error) {
-          const pi = error.payment_intent
+      }
+      const unifiedCheckout = widgets.create("payment", unifiedCheckoutOptions)
+      checkoutComponent.current = unifiedCheckout
+      unifiedCheckout.mount("#unified-checkout")
+    }
+    scriptTag.onload = () => {
+      load()
+    }
+    document.body.appendChild(scriptTag)
+  }, [clientSecret])
 
-          if (
-            (pi && pi.status === "requires_capture") ||
-            (pi && pi.status === "succeeded")
-          ) {
-            console.log("Payment COmpleted")
-            setIsLoading(false)
-          }
+  const handlePayment = useCallback(async () => {
+    if (!hyper || !widgets) {
+      return
+    }
 
-          // setErrorMessage(error.message || null)
-          return
-        }
+    setIsLoading(true)
 
-        if (
-          (paymentIntent && paymentIntent.status === "requires_capture") ||
-          paymentIntent.status === "succeeded"
-        ) {
-          console.log("Payment COmpleted")
-          setIsLoading(false)
-
-          // return onPaymentCompleted()
-        }
-
-        return
-      })
-  }, [
-    cart.billing_address.address_1,
-    cart.billing_address.address_2,
-    cart.billing_address.city,
-    cart.billing_address.country_code,
-    cart.billing_address.first_name,
-    cart.billing_address.last_name,
-    cart.billing_address.phone,
-    cart.billing_address.postal_code,
-    cart.billing_address.province,
-    cart.email,
-    clientSecret,
-    elements,
-    hyper,
-  ])
+    const { error, status } = await hyper.confirmPayment({
+      widgets,
+      confirmParams: {
+        // Make sure to change this to your payment completion page
+        return_url: `${process.env.NEXT_PUBLIC_BASE_URL}/complete`,
+      },
+      redirect: "if_required", // if you wish to redirect always, otherwise it is defaulted to "if_required",
+    })
+    if (error?.type === "invalid_request") {
+      await deletePaymentSessionForCart(cart.payment_session?.provider_id ?? "")
+      router.replace(pathname + "?step=delivery")
+    }
+    console.log(status, error, "hello")
+    if (status === "succeeded") {
+      checkoutComponent.current.unmount()
+      await placeOrder()
+      setIsLoading(false)
+      toast.toast({ variant: "success", title: `Payment is completed` })
+    } else {
+      toast.toast({ variant: "info", title: `Payment Info ${status}` })
+      router.replace("/")
+    }
+  }, [cart.payment_session?.provider_id, hyper, pathname, router, widgets])
 
   return (
-    <>
-      {clientSecret ? (
-        <Button onClick={onSubmit} disabled={notReady || loading}>
-          Continue Payment
-        </Button>
-      ) : (
-        <p>Not a valid Payment, try again!</p>
-      )}
-    </>
+    <form id="payment-form">
+      <div id="unified-checkout"></div>
+      <Button
+        onClick={handlePayment}
+        size="large"
+        style={{ marginTop: "10px" }}
+        // disabled={disabled || notReady}
+        isLoading={isLoading}
+        type="submit"
+        data-testid={dataTestId}
+      >
+        Place order
+      </Button>
+      <div id="payment-message" className="hidden"></div>
+    </form>
   )
 }

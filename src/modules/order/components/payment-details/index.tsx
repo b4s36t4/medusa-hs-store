@@ -23,7 +23,10 @@ const PaymentDetails = ({ order }: PaymentDetailsProps) => {
               <Text className="txt-medium-plus text-ui-fg-base mb-1">
                 Payment method
               </Text>
-              <Text className="txt-medium text-ui-fg-subtle" data-testid="payment-method">
+              <Text
+                className="txt-medium text-ui-fg-subtle"
+                data-testid="payment-method"
+              >
                 {paymentInfoMap[payment.provider_id].title}
               </Text>
             </div>

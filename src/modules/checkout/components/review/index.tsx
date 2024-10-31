@@ -1,10 +1,14 @@
 "use client"
 
-import { Heading, Text, clx } from "@medusajs/ui"
+import { Button, Heading, Text, clx } from "@medusajs/ui"
 
 import PaymentButton from "../payment-button"
 import { useSearchParams } from "next/navigation"
 import { Cart } from "@medusajs/medusa"
+import {
+  createPaymentSessionsForCart,
+  deletePaymentSessionForCart,
+} from "@modules/checkout/actions"
 
 const Review = ({
   cart,
@@ -22,6 +26,28 @@ const Review = ({
     cart.shipping_address &&
     cart.shipping_methods.length > 0 &&
     (cart.payment_session || paidByGiftcard)
+
+  if (cart.payment_session?.status === "error") {
+    return (
+      <div className="bg-white">
+        <Heading level={"h3"}>Payment Failed</Heading>
+        <Text className="mt-2">
+          Your previous attempt is failed, if you still wish to continue please
+          retry.
+        </Text>
+        <Button
+          className="mt-4"
+          onClick={async () => {
+            const provider = (cart.payment_session?.provider_id as string) ?? ""
+            await deletePaymentSessionForCart(provider)
+            await createPaymentSessionsForCart()
+          }}
+        >
+          Retry Payment
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="bg-white">

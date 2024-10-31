@@ -30,6 +30,10 @@ export const paymentInfoMap: Record<
     title: "Test payment",
     icon: <CreditCard />,
   },
+  hyperswitch: {
+    title: "Hyperswitch",
+    icon: <p>Hyperswitch</p>,
+  },
   // Add more payment providers here
 }
 

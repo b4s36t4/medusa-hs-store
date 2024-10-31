@@ -40,17 +40,18 @@ const Shipping: React.FC<ShippingProps> = ({
     router.push(pathname + "?step=delivery", { scroll: false })
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     setIsLoading(true)
+    if (!cart.payment_session || cart.payment_sessions.length == 0) {
+      await createPaymentSessionsForCart()
+    }
+    setIsLoading(false)
     router.push(pathname + "?step=payment", { scroll: false })
   }
 
   const set = async (id: string) => {
     setIsLoading(true)
     await setShippingMethod(id)
-      .then(async () => {
-        return await createPaymentSessionsForCart()
-      })
       .then(() => {
         setIsLoading(false)
       })

@@ -7,6 +7,7 @@ import {
   completeCart,
   createPaymentSessions,
   deleteDiscount,
+  deletePaymentSession,
   setPaymentSession,
   updateCart,
 } from "@lib/data"
@@ -178,6 +179,19 @@ export async function createPaymentSessionsForCart() {
 
   try {
     await createPaymentSessions(cartId)
+    revalidateTag("cart")
+  } catch (error: any) {
+    throw error
+  }
+}
+
+export async function deletePaymentSessionForCart(providerId: string) {
+  const cartId = cookies().get("_medusa_cart_id")?.value
+
+  if (!cartId) throw new Error("No cartId cookie found")
+
+  try {
+    await deletePaymentSession({ cartId, providerId })
     revalidateTag("cart")
   } catch (error: any) {
     throw error

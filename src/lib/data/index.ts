@@ -179,6 +179,20 @@ export async function setPaymentSession({
     .catch((err) => medusaError(err))
 }
 
+export async function deletePaymentSession({
+  cartId,
+  providerId,
+}: {
+  cartId: string
+  providerId: string
+}) {
+  const headers = getMedusaHeaders(["cart"])
+  return medusaClient.carts
+    .deletePaymentSession(cartId, providerId, headers)
+    .then((cart) => cart)
+    .catch((error) => medusaError(error))
+}
+
 export async function completeCart(cartId: string) {
   const headers = getMedusaHeaders(["cart"])
 
